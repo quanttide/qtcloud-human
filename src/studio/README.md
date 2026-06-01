@@ -1,17 +1,57 @@
-# qtcloud-hr-studio
+# 量潮人事云工作台 (QtCloud HR Studio)
 
-量潮人事云工作台 - QtCloud HR Studio
+量潮人事云工作台是一款跨平台人力资源管理应用，提供招聘筛选、薪资核算等核心 HR 功能的管理界面。
 
-## Getting Started
+## 功能模块
 
-This project is a starting point for a Flutter application.
+### 招聘
+- 简历收件箱管理
+- AI 初筛结果审核
+- 候选人匹配度排序
 
-A few resources to get you started if this is your first Flutter project:
+### 薪资
+- 计时工资核算
+- 加班费与绩效奖金计算
+- 政策参数集中配置
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 平台支持
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+| 平台 | 状态 |
+|------|------|
+| Android | ✅ |
+| iOS | ✅ |
+| Web | ✅ |
+| macOS | ✅ |
+| Linux | ✅ |
+| Windows | ✅ |
+
+## 开发环境
+
+- Flutter SDK: ^3.11.5
+- Dart SDK: ^3.11.5
+
+## 快速开始
+
+```bash
+# 获取依赖
+flutter pub get
+
+# 运行应用
+flutter run
+
+# 运行测试
+flutter test
+```
+
+## 项目结构
+
+```
+lib/
+├── main.dart              # 应用入口
+├── app/                   # 应用配置
+├── features/              # 功能模块
+│   ├── recruitment/       # 招聘模块
+│   └── salary/           # 薪资模块
+├── shared/                # 共享组件
+└── services/             # 业务服务
+```

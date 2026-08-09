@@ -1,0 +1,40 @@
+[
+  {
+    "_comment": "mock 数据：量潮人事云工作台员工关系页演示数据，非真实记录；后续替换为 GET /relations/:id",
+    "id": "rel_001",
+    "employee": "张同学",
+    "identity": "实习生",
+    "status": "probation",
+    "statusLabel": "试用期中",
+    "hireDate": "2026-07-01",
+    "probationEnd": "2026-08-31",
+    "records": [
+      {
+        "id": "r1",
+        "type": "onboard",
+        "title": "入职：实习生（产品与人事方向）",
+        "date": "2026-07-01",
+        "status": "done",
+        "note": "入职材料齐备，进入新人期培训"
+      },
+      {
+        "id": "r2",
+        "type": "probation",
+        "title": "试用期：新人期培训与主线任务",
+        "date": "2026-07-01 至 2026-08-31",
+        "status": "doing",
+        "note": "主线任务 3/5 完成，政策整理进行中"
+      },
+      {
+        "id": "r3",
+        "type": "promotion",
+        "title": "试用期转正评估（预备晋升）",
+        "date": "2026-08 下旬",
+        "status": "todo",
+        "note": "验收标准：政策手册沉淀、能教别人干"
+      }
+    ],
+    "statusNote": "试用期是筛选与培训的延续：转正以主线任务验收为准；当前重点为政策手册沉淀与'教别人干'能力。",
+    "next": "转正评估：2026-08 下旬，验收手册沉淀与带教能力"
+  }
+]

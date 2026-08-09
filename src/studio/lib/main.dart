@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'screens/compensation_screen.dart';
+import 'screens/overview_screen.dart';
 import 'screens/performance_screen.dart';
+import 'screens/plan_screen.dart';
 import 'screens/recruitment_screen.dart';
+import 'screens/relation_screen.dart';
+import 'screens/training_screen.dart';
 
 void main() => runApp(const WorkbenchApp());
 
@@ -36,7 +41,15 @@ class WorkbenchShell extends StatefulWidget {
 class _WorkbenchShellState extends State<WorkbenchShell> {
   int _index = 0;
 
-  static const _pages = <Widget>[PerformanceScreen(), RecruitmentPage()];
+  static const _pages = <Widget>[
+    OverviewScreen(),
+    PlanScreen(),
+    RecruitmentPage(),
+    TrainingScreen(),
+    PerformanceScreen(),
+    CompensationScreen(),
+    RelationScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -67,14 +80,39 @@ class _WorkbenchShellState extends State<WorkbenchShell> {
             ),
             destinations: const [
               NavigationRailDestination(
-                icon: Icon(Icons.assessment_outlined),
-                selectedIcon: Icon(Icons.assessment),
-                label: Text('绩效'),
+                icon: Icon(Icons.dashboard_outlined),
+                selectedIcon: Icon(Icons.dashboard),
+                label: Text('总览'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.event_note_outlined),
+                selectedIcon: Icon(Icons.event_note),
+                label: Text('计划'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.mail_outline),
                 selectedIcon: Icon(Icons.mail),
                 label: Text('招聘'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.school_outlined),
+                selectedIcon: Icon(Icons.school),
+                label: Text('培训'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.assessment_outlined),
+                selectedIcon: Icon(Icons.assessment),
+                label: Text('绩效'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.payments_outlined),
+                selectedIcon: Icon(Icons.payments),
+                label: Text('薪酬'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.groups_outlined),
+                selectedIcon: Icon(Icons.groups),
+                label: Text('关系'),
               ),
             ],
           ),

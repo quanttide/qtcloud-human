@@ -2,7 +2,7 @@
 #
 # 桶 qtcloud-human-studio：命名对齐站点规范 {repo}-{type}（如 qtclass-studio / qtdata-studio）。
 # 产物：Flutter Web 版量潮人事云工作台（index.html + flutter_bootstrap.js）。
-# 静态网站托管：Web 版作为默认首页（human.quanttide.com 根路径）。
+# 静态网站托管：Web 版作为默认首页（human.cloud.quanttide.com 根路径）。
 # 部署流水线：.github/workflows/deploy-studio.yml（tag 触发 → flutter build → ossutil cp → 刷新 CDN）。
 
 resource "alicloud_oss_bucket" "studio" {

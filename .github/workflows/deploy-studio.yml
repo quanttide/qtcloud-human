@@ -4,7 +4,7 @@
 #
 # 对齐 qtdata、qtclass 与 qtrecurit 的 deploy-studio.yml 模式：
 #   studio/* tag → Actions（flutter build web，ossutil cp）→ OSS 桶（qtcloud-human-studio，静态网站托管）
-#   → CDN（human.quanttide.com，泛域名证书 *.quanttide.com）→ 用户浏览器
+#   → CDN（human.cloud.quanttide.com，免费证书）→ 用户浏览器
 #
 # 触发说明：用 tag 精确匹配 studio/ 前缀，避免其他 tag 误触发。
 #
@@ -25,7 +25,7 @@ concurrency:
 env:
   OSS_BUCKET: qtcloud-human-studio
   OSS_ENDPOINT: oss-cn-hangzhou.aliyuncs.com
-  CDN_DOMAIN: human.quanttide.com
+  CDN_DOMAIN: human.cloud.quanttide.com
 
 jobs:
   build-and-deploy:

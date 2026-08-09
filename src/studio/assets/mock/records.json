@@ -1,0 +1,43 @@
+[
+  {
+    "_comment": "mock 数据：量潮人事云工作台绩效页演示数据，非真实绩效记录；后续替换为 GET /performance/:id",
+    "id": "perf_001",
+    "employee": "张同学",
+    "identity": "实习生",
+    "cycle": "2026-07",
+    "records": [
+      {
+        "id": "r1",
+        "type": "behavior",
+        "title": "维护招聘邮箱与候选人标签",
+        "time": "2026-07",
+        "result": "三轮初筛处理 120+ 封投递，标签流转零遗漏"
+      },
+      {
+        "id": "r2",
+        "type": "practice",
+        "title": "实训基地任务：招聘政策整理",
+        "time": "2026-07-20 至 07-27",
+        "result": "从一周聊天记录提炼出招聘政策草案，被团队采纳"
+      }
+    ],
+    "metric": {
+      "label": "数字资产贡献（参考指标，不唯一不主要）",
+      "items": [
+        {
+          "source": "GitHub",
+          "value": "17 次提交 / 3 个 PR"
+        },
+        {
+          "source": "Figma",
+          "value": "2 个文件"
+        }
+      ]
+    },
+    "assessment": {
+      "level": "优秀",
+      "assessor": "李指导",
+      "comment": "初筛零遗漏、政策草案被采纳；主动整理候选人档案并留下操作说明，责任心是内化的而非表演。"
+    }
+  }
+]

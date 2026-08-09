@@ -3,14 +3,15 @@
 #
 # 背景：human.cloud.quanttide.com 是量潮人事云工作台发布域名，CDN 源站为 OSS 桶 qtcloud-human-studio
 # （桶与 ACL 见 manifests/terraform/studio.tf；发布流程见 .github/workflows/deploy-studio.yml）。
-# 证书为 acme.sh 签发的泛域名证书 *.quanttide.com（ZeroSSL），续期后需重跑本脚本更新证书，
-# 与 recurit/data.cloud/econ.cloud 等既有域名一致（同一张泛域名证书）。
+# 证书为 acme.sh 签发的单域名证书 human.cloud.quanttide.com（ZeroSSL ECC，dns_ali 验证），
+# 注意：泛域名证书 *.quanttide.com 不匹配多级子域（human.cloud.quanttide.com），需单独签发；
+# 续期后需重跑本脚本更新证书。
 #
 # 前置：本机已登录 aliyun CLI（AK 模式）；acme.sh 证书目录存在。
 set -e
 
 DOMAIN='human.cloud.quanttide.com'
-CERT_DIR='/home/iguo/.acme.sh/*.quanttide.com_ecc'
+CERT_DIR="/home/iguo/.acme.sh/${DOMAIN}_ecc"
 CERT_NAME="cert-${DOMAIN}-$(date +%s)"
 
 echo "=== 1. 绑定 HTTPS 证书（CDN）==="
@@ -20,7 +21,7 @@ aliyun cdn SetCdnDomainSSLCertificate \
   --CertType upload \
   --SSLProtocol on \
   --SSLPub "$(cat "$CERT_DIR/fullchain.cer")" \
-  --SSLPri "$(cat "$CERT_DIR/*.quanttide.com.key")"
+  --SSLPri "$(cat "$CERT_DIR/${DOMAIN}.key")"
 
 echo "=== 2. 添加 DNS CNAME（已存在则跳过）==="
 # RR=human.cloud（cloud.quanttide.com 子域记录）；RRKeyWord 会误匹配前缀，

@@ -1,0 +1,14 @@
+name: recruitment_plan_implementation
+description: 招聘计划参考实现（自 qtadmin 迁移，手写模型无 freezed）
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

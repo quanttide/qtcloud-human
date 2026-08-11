@@ -20,4 +20,4 @@ docs/
 └── add/          # 架构设计文档
 ```
 
-文档站点：`https://quanttide.github.io/qtcloud-hr/`
+文档站点：`https://quanttide.github.io/qtcloud-human/`

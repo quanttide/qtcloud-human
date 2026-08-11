@@ -1,4 +1,4 @@
-# AGENTS.md - qtcloud-hr
+# AGENTS.md - qtcloud-human
 
 Skills provide specialized instructions and workflows for specific tasks.
 Use the skill tool to load a skill when a task matches its description.
@@ -30,5 +30,5 @@ BRD → PRD → ADD → 代码 → QA
 
 本仓库是主仓库 quanttide-platform 的子模块，提交需两段式：
 
-1. 在 qtcloud-hr 内提交推送
+1. 在 qtcloud-human 内提交推送
 2. 在主仓库更新子模块引用并提交推送

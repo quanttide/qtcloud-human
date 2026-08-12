@@ -5,7 +5,7 @@ WORKDIR /src
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
 
-COPY go.mod go.sum ./
+COPY go.mod* ./
 RUN go mod download
 
 COPY . .

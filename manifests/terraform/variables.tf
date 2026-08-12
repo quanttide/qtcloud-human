@@ -15,3 +15,20 @@ variable "environment" {
   type        = string
   default     = "prod"
 }
+
+variable "image" {
+  description = "FC 容器镜像（ACR 地址）。由 CI 注入"
+  type        = string
+}
+
+variable "fc_memory" {
+  description = "FC 函数内存（MB）"
+  type        = number
+  default     = 512
+}
+
+variable "fc_timeout" {
+  description = "FC 函数超时（秒）"
+  type        = number
+  default     = 60
+}

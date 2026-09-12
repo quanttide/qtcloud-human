@@ -24,6 +24,60 @@ const (
 	RecruitmentInboxStatusFailed           = "failed"
 )
 
+// 候选人人工审核状态。空串表示来源未给出结论，按「尚未决定」处理。
+const (
+	RecruitmentCandidateStatusPending  = "pending"
+	RecruitmentCandidateStatusPassed   = "passed"
+	RecruitmentCandidateStatusRejected = "rejected"
+)
+
+// RecruitmentFlowActions 是可以对候选人外发的流程动作。
+var RecruitmentFlowActions = []string{
+	RecruitmentActionSendSurvey,
+	RecruitmentActionSendTrainingInvite,
+	RecruitmentActionSendExam,
+	RecruitmentActionCreateInterviewNotice,
+}
+
+// AllowedRecruitmentActions 返回候选人当前状态下允许执行的流程动作。
+//
+// 这是动作准入规则的唯一定义处：provider 在真正执行前用它做闸门，
+// 界面也应当只渲染这里返回的动作，两边不再各写一份判断。
+//
+// 规则：只有「已通过」的候选人可以外发。待处理尚未做出决定，已拒绝属于终态，
+// 状态缺失（空串）同样视为未决定——三者都不允许发送。
+//
+// 如果业务上确实允许「未经审核直接发送」，只需把下面的判断改成
+// `candidate.Status == RecruitmentCandidateStatusRejected` 取反。
+func AllowedRecruitmentActions(candidate RecruitmentCandidate) []string {
+	if candidate.Status != RecruitmentCandidateStatusPassed {
+		return nil
+	}
+	return append([]string(nil), RecruitmentFlowActions...)
+}
+
+// CanRunRecruitmentAction 判断某个流程动作在当前状态下是否允许执行。
+func CanRunRecruitmentAction(candidate RecruitmentCandidate, action string) bool {
+	for _, allowed := range AllowedRecruitmentActions(candidate) {
+		if allowed == action {
+			return true
+		}
+	}
+	return false
+}
+
+// RecruitmentActionBlockedReason 返回动作被拒绝的可读原因，便于直接回给界面。
+func RecruitmentActionBlockedReason(candidate RecruitmentCandidate) string {
+	switch candidate.Status {
+	case RecruitmentCandidateStatusRejected:
+		return "该候选人已拒绝，不再提供外发动作。"
+	case RecruitmentCandidateStatusPassed:
+		return "该动作不属于可执行的流程动作。"
+	default:
+		return "该候选人尚未通过人工审核，暂不能外发流程动作。"
+	}
+}
+
 type RecruitmentCandidate struct {
 	ID                string                        `json:"id"`
 	Name              string                        `json:"name"`

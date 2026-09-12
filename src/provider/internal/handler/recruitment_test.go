@@ -137,6 +137,17 @@ func newRecruitmentTestServer(t *testing.T, adapter *fakeRecruitmentAdapter) (*h
 }
 
 func newRecruitmentTestServerWithConfig(t *testing.T, adapter *fakeRecruitmentAdapter, config RecruitmentHandlerConfig) (*httptest.Server, string) {
+	return newRecruitmentTestServerForStatus(
+		t,
+		adapter,
+		config,
+		domain.RecruitmentCandidateStatusPassed,
+	)
+}
+
+// 种子候选人的状态默认是「已通过」：动作测试操作的就是一个允许外发的候选人。
+// 要验证状态闸门本身，用 newRecruitmentTestServerForStatus 指定其它状态。
+func newRecruitmentTestServerForStatus(t *testing.T, adapter *fakeRecruitmentAdapter, config RecruitmentHandlerConfig, status string) (*httptest.Server, string) {
 	t.Helper()
 	logDir := t.TempDir()
 	recruitmentStore := store.NewRecruitmentStore([]domain.RecruitmentCandidate{
@@ -146,7 +157,7 @@ func newRecruitmentTestServerWithConfig(t *testing.T, adapter *fakeRecruitmentAd
 			Email:           "zhangsan@example.com",
 			Position:        "数据工程师",
 			Stage:           "new",
-			Status:          "pending",
+			Status:          status,
 			HasResume:       true,
 			SourceMessageID: "message_001",
 			ResumeAttachments: []domain.RecruitmentResumeAttachment{
@@ -587,6 +598,96 @@ func TestRecruitmentCandidateActionsCallAdapterAndAudit(t *testing.T) {
 		if strings.Contains(logText, leak) {
 			t.Fatalf("audit log leaked request params %q: %s", leak, logText)
 		}
+	}
+}
+
+func TestRecruitmentCandidateActionsBlockedByStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		status string
+		body   string
+	}{
+		{
+			name:   "已拒绝不允许发送笔试",
+			status: domain.RecruitmentCandidateStatusRejected,
+			body:   `{"action":"send_exam","dry_run":true,"params":{}}`,
+		},
+		{
+			name:   "已拒绝不允许生成面试通知",
+			status: domain.RecruitmentCandidateStatusRejected,
+			body: `{"action":"create_interview_notice","dry_run":true,` +
+				`"params":{"position":"数据工程师","time":"2026-09-14 10:00"}}`,
+		},
+		{
+			name:   "待处理不允许发送问卷",
+			status: domain.RecruitmentCandidateStatusPending,
+			body:   `{"action":"send_survey","dry_run":true,"params":{}}`,
+		},
+		{
+			name:   "状态缺失按未决定处理",
+			status: "",
+			body:   `{"action":"send_survey","dry_run":true,"params":{}}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			adapter := &fakeRecruitmentAdapter{}
+			ts, _ := newRecruitmentTestServerForStatus(
+				t,
+				adapter,
+				RecruitmentHandlerConfig{AllowRealActions: true},
+				tc.status,
+			)
+			defer ts.Close()
+
+			resp := postJSON(
+				t,
+				ts.URL+"/api/v1/recruitment/candidates/cand_001/actions",
+				tc.body,
+			)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusConflict {
+				t.Fatalf("expected 409, got %d", resp.StatusCode)
+			}
+			if len(adapter.actions) != 0 {
+				t.Fatalf("被状态闸门拦下的动作不应触达 adapter: %+v", adapter.actions)
+			}
+		})
+	}
+}
+
+func TestRecruitmentCandidateActionsAllowedForPassedCandidate(t *testing.T) {
+	adapter := &fakeRecruitmentAdapter{}
+	ts, logDir := newRecruitmentTestServerForStatus(
+		t,
+		adapter,
+		RecruitmentHandlerConfig{AllowRealActions: true},
+		domain.RecruitmentCandidateStatusPassed,
+	)
+	defer ts.Close()
+
+	resp := postJSON(
+		t,
+		ts.URL+"/api/v1/recruitment/candidates/cand_001/actions",
+		`{"action":"send_exam","dry_run":false,"params":{}}`,
+	)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if len(adapter.actions) != 1 {
+		t.Fatalf("expected adapter called once, got %+v", adapter.actions)
+	}
+
+	data, err := os.ReadFile(filepath.Join(logDir, "recruitment-actions.jsonl"))
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	if !strings.Contains(string(data), "send_exam") {
+		t.Fatalf("audit log should record the action: %s", string(data))
 	}
 }
 
@@ -1044,7 +1145,7 @@ func TestRecruitmentCandidateActionDefaultsToDryRunWhenConfigured(t *testing.T) 
 			Name:   "张三",
 			Email:  "zhangsan@example.com",
 			Stage:  "new",
-			Status: "pending",
+			Status: domain.RecruitmentCandidateStatusPassed,
 		},
 	})
 	h := NewRecruitmentHandler(recruitmentStore, adapter, recruitment.NewFileAuditLogger(logDir), RecruitmentHandlerConfig{DryRunDefault: true})

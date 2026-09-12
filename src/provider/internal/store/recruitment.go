@@ -154,7 +154,8 @@ func preserveWorkflowState(
 	incoming domain.RecruitmentCandidate,
 	existing domain.RecruitmentCandidate,
 ) domain.RecruitmentCandidate {
-	if existing.Status == "passed" || existing.Status == "rejected" {
+	if existing.Status == domain.RecruitmentCandidateStatusPassed ||
+		existing.Status == domain.RecruitmentCandidateStatusRejected {
 		incoming.Status = existing.Status
 	}
 	if existing.Stage != "" && existing.Stage != "new" {

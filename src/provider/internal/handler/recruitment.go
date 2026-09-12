@@ -322,6 +322,14 @@ func (h *RecruitmentHandler) RunCandidateAction(w http.ResponseWriter, r *http.R
 		return
 	}
 	req = h.normalizeActionRequest(req)
+	// 状态闸门：动作是否合法由领域规则决定，与 dry_run 无关。
+	// 界面靠它决定渲染哪些按钮，这里再兜一次，防止绕过界面直接调接口。
+	if !domain.CanRunRecruitmentAction(candidate, req.Action) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": domain.RecruitmentActionBlockedReason(candidate),
+		})
+		return
+	}
 	if !req.IsDryRun(h.dryRunDefault) && !h.allowRealActions {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "real recruitment actions are disabled"})
 		return
@@ -627,10 +635,10 @@ func validateInboxSyncRequest(req domain.RecruitmentInboxSyncRequest) error {
 
 func normalizeCandidateStatus(status string) string {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "passed":
-		return "passed"
-	case "rejected":
-		return "rejected"
+	case domain.RecruitmentCandidateStatusPassed:
+		return domain.RecruitmentCandidateStatusPassed
+	case domain.RecruitmentCandidateStatusRejected:
+		return domain.RecruitmentCandidateStatusRejected
 	default:
 		return ""
 	}

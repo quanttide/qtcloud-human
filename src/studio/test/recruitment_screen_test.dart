@@ -268,6 +268,7 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '预览'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, '下载'), findsOneWidget);
 
+    await tester.ensureVisible(find.widgetWithText(OutlinedButton, '下载'));
     await tester.tap(find.widgetWithText(OutlinedButton, '下载'));
     await tester.pumpAndSettle();
 
@@ -364,6 +365,7 @@ void main() {
     expect(find.text('预览'), findsOneWidget);
     expect(find.text('下载'), findsOneWidget);
 
+    await tester.ensureVisible(find.widgetWithText(OutlinedButton, '预览'));
     await tester.tap(find.widgetWithText(OutlinedButton, '预览'));
     await tester.pumpAndSettle();
 
@@ -442,6 +444,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.widgetWithText(OutlinedButton, '下载'));
       await tester.tap(find.widgetWithText(OutlinedButton, '下载'));
       await tester.pumpAndSettle();
 
@@ -728,10 +731,14 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RecruitmentPage()));
     await tester.pumpAndSettle();
 
+    expect(find.textContaining('未配置 provider API'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('ops-menu')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('检测环境'), findsOneWidget);
     expect(find.text('拉取新邮件'), findsOneWidget);
     expect(find.text('生成报告'), findsOneWidget);
-    expect(find.text('dry_run'), findsOneWidget);
-    expect(find.textContaining('未配置 provider API'), findsOneWidget);
   });
 
   testWidgets('Recruitment page can check provider CLI and mailbox status', (
@@ -788,12 +795,127 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '检测环境'));
+    await tester.tap(find.byKey(const ValueKey('ops-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('检测环境'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('provider 环境未就绪'), findsWidgets);
     expect(find.textContaining('当前账号：user-001'), findsOneWidget);
     expect(find.textContaining('HR 邮箱认证态不可用'), findsOneWidget);
     expect(find.textContaining('qtrecurit 0.1.0'), findsOneWidget);
+  });
+
+  testWidgets('Recruitment page hides flow actions for a rejected candidate', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecruitmentPage(apiClient: clientForCandidates(candidatesJson())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 旧候选人正文为空，仅含简历附件，构造时即判为已拒绝。
+    await tester.tap(find.widgetWithText(InkWell, '旧候选人'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('终态邮件不再提供外发动作。'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '发送问卷'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '发送实训邀约'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '发送笔试'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '生成面试通知'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '通过'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, '拒绝'), findsNothing);
+  });
+
+  testWidgets('Recruitment page shows only review actions before a decision', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecruitmentPage(apiClient: clientForCandidates(candidatesJson())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 新候选人有正文，处于待处理。
+    await tester.tap(find.widgetWithText(InkWell, '新候选人'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, '通过'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '拒绝'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '发送问卷'), findsNothing);
+    expect(find.text('做出结论后，才出现对应的流程动作。'), findsOneWidget);
+  });
+
+  testWidgets('Recruitment page offers flow actions to a passed candidate', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecruitmentPage(apiClient: clientForCandidates(candidatesJson())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(InkWell, '已处理候选人'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, '发送问卷'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '生成面试通知'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '通过'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, '拒绝'), findsNothing);
+  });
+
+  testWidgets('Recruitment page highlights the selected inbox tile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecruitmentPage(apiClient: clientForCandidates(candidatesJson())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Finder selectedTile(String name) => find.ancestor(
+      of: find.text(name),
+      matching: find.byWidgetPredicate((w) {
+        if (w is! Container) {
+          return false;
+        }
+        final decoration = w.decoration;
+        return decoration is BoxDecoration &&
+            decoration.color == const Color(0xFFEFF6FF);
+      }),
+    );
+
+    // 初始选中按 received_at 倒序的第一封，即新候选人。
+    expect(selectedTile('新候选人'), findsOneWidget);
+    expect(selectedTile('旧候选人'), findsNothing);
+
+    await tester.tap(find.widgetWithText(InkWell, '旧候选人'));
+    await tester.pumpAndSettle();
+
+    expect(selectedTile('旧候选人'), findsOneWidget);
+    expect(selectedTile('新候选人'), findsNothing);
+  });
+
+  testWidgets('Recruitment page keeps dry_run next to the action area', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecruitmentPage(apiClient: clientForCandidates(candidatesJson())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('演练模式 · 不会真实发送'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('dry-run-toggle')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('真实发送已开启'), findsOneWidget);
   });
 }

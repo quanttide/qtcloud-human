@@ -226,6 +226,8 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     return bTime.compareTo(aTime);
   }
 
+  /// 列表顺序沿用既有约定：按 received_at 倒序，等时间时保持 provider 顺序。
+  /// 「待处理优先」不在这里做——那属于筛选默认值的产品决定。
   List<Email> get _visibleEmails {
     switch (_filter) {
       case InboxFilter.all:
@@ -321,6 +323,17 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     _interviewPositionController.text = email?.position ?? '';
     if (_interviewTimeController.text.trim().isEmpty) {
       _interviewTimeController.text = _defaultInterviewTime();
+    }
+  }
+
+  void _handleOpsMenu(String value) {
+    switch (value) {
+      case 'detect':
+        _checkProviderStatus();
+      case 'sync':
+        _syncInbox();
+      case 'report':
+        _createReport();
     }
   }
 
@@ -596,14 +609,6 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     }
   }
 
-  Color _detectColor(DetectResult d) => d == DetectResult.only
-      ? const Color(0xFF991B1B)
-      : const Color(0xFF166534);
-
-  Color _detectBg(DetectResult d) => d == DetectResult.only
-      ? const Color(0xFFFEE2E2)
-      : const Color(0xFFDCFCE7);
-
   String _detectLabel(DetectResult d) => d == DetectResult.only ? '仅简历' : '有正文';
 
   String _statusLabel(EmailStatus s) => s == EmailStatus.pending
@@ -612,9 +617,34 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
       ? '已通过'
       : '已拒绝';
 
-  IconData _detectIcon(DetectResult d) => d == DetectResult.only
-      ? Icons.description_outlined
-      : Icons.email_outlined;
+  /// 状态语义色：只有终态给颜色，待处理保持中性。
+  Color _statusColor(EmailStatus s) => s == EmailStatus.passed
+      ? const Color(0xFF166534)
+      : s == EmailStatus.rejected
+      ? const Color(0xFF991B1B)
+      : const Color(0xFF5F5E5A);
+
+  /// 审核是否已有结论。终态候选人不再接受「通过 / 拒绝」。
+  bool _reviewDone(Email e) => e.status != EmailStatus.pending;
+
+  /// 单一准入点：当前状态下允许执行的流程动作（发送类）。
+  ///
+  /// 界面上所有「能不能发」的判断都从这里取，不再各自比对 status。
+  /// 后续把规则迁到 provider 时，只需把这个函数换成读取 allowed_actions。
+  ///
+  /// 目前规则：仅「已通过」可发。待处理尚未做决定，已拒绝属终态，
+  /// 两者都不允许外发。
+  List<RecruitmentAction> _allowedFlowActions(Email e) {
+    if (e.status != EmailStatus.passed) {
+      return const <RecruitmentAction>[];
+    }
+    return const <RecruitmentAction>[
+      RecruitmentAction.sendSurvey,
+      RecruitmentAction.sendTrainingInvite,
+      RecruitmentAction.sendExam,
+      RecruitmentAction.createInterviewNotice,
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -623,60 +653,37 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
         title: const Text('招聘筛选网关'),
         centerTitle: false,
         actions: [
-          Row(
-            children: [
-              const Text('dry_run'),
-              Switch(
-                value: _dryRun,
-                onChanged: (value) => setState(() => _dryRun = value),
+          PopupMenuButton<String>(
+            key: const ValueKey('ops-menu'),
+            tooltip: '运维',
+            onSelected: _handleOpsMenu,
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'detect',
+                enabled: !_providerStatusLoading,
+                child: Text(_providerStatusLoading ? '检测中…' : '检测环境'),
               ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: _providerStatusLoading
-                      ? null
-                      : _checkProviderStatus,
-                  icon: _providerStatusLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.health_and_safety_outlined, size: 18),
-                  label: Text(_providerStatusLoading ? '检测中' : '检测环境'),
-                ),
+              PopupMenuItem<String>(
+                value: 'sync',
+                enabled: !_inboxSyncLoading,
+                child: Text(_inboxSyncLoading ? '拉取中…' : '拉取新邮件'),
               ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: _inboxSyncLoading ? null : _syncInbox,
-                  icon: _inboxSyncLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.mark_email_unread_outlined, size: 18),
-                  label: Text(_inboxSyncLoading ? '拉取中' : '拉取新邮件'),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: FilledButton.icon(
-                  onPressed: _reportLoading || _inboxSyncLoading
-                      ? null
-                      : _createReport,
-                  icon: _reportLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.summarize_outlined, size: 18),
-                  label: Text(_reportLoading ? '生成中' : '生成报告'),
-                ),
+              PopupMenuItem<String>(
+                value: 'report',
+                enabled: !_reportLoading && !_inboxSyncLoading,
+                child: Text(_reportLoading ? '生成中…' : '生成报告'),
               ),
             ],
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  Text('运维', style: TextStyle(fontSize: 14)),
+                  SizedBox(width: 4),
+                  Icon(Icons.more_horiz, size: 18),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -807,39 +814,28 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
       ),
       child: Row(
         children: [
-          _statItem('总邮件', _total.toString(), filter: InboxFilter.all),
           _statItem(
             '待处理',
-            _unprocessedCount.toString(),
-            color: const Color(0xFF991B1B),
+            '$_unprocessedCount/$_total',
             filter: InboxFilter.unprocessed,
           ),
+          _statItem('全部', _total.toString(), filter: InboxFilter.all),
           _statItem(
             '有正文',
-            _hasCount.toString(),
-            color: const Color(0xFF166534),
+            '$_hasCount/$_total',
             filter: InboxFilter.hasBody,
           ),
-          _statItem(
-            '自动处理',
-            '$_processed/$_total',
-            filter: InboxFilter.processed,
-          ),
+          _statItem('已处理', '$_processed/$_total', filter: InboxFilter.processed),
         ],
       ),
     );
   }
 
-  Widget _statItem(
-    String label,
-    String value, {
-    required InboxFilter filter,
-    Color? color,
-  }) {
+  Widget _statItem(String label, String value, {required InboxFilter filter}) {
     final selected = _filter == filter;
     return Expanded(
       child: Material(
-        color: selected ? const Color(0xFFEFF6FF) : Colors.transparent,
+        color: Colors.transparent,
         child: InkWell(
           key: ValueKey('inbox-filter-${filter.name}'),
           onTap: () => _setFilter(filter),
@@ -850,16 +846,16 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
             selected: selected,
             child: Ink(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
                 border: Border(
                   right: BorderSide(color: Colors.grey.shade300),
-                  bottom: selected
-                      ? BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 2,
-                        )
-                      : BorderSide.none,
+                  bottom: BorderSide(
+                    color: selected
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.transparent,
+                    width: 2,
+                  ),
                 ),
               ),
               child: Column(
@@ -868,15 +864,22 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
                   Text(
                     value,
                     style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: color ?? Theme.of(context).colorScheme.primary,
+                      fontSize: 20,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected
+                          ? const Color(0xFF222222)
+                          : const Color(0xFF5F5E5A),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     label,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: selected
+                          ? const Color(0xFF5F5E5A)
+                          : Colors.grey.shade500,
+                    ),
                   ),
                 ],
               ),
@@ -922,60 +925,81 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
 
   Widget _buildEmailTile(Email e) {
     final sel = e.id == _selectedId;
-    final dc = _detectColor(e.detected);
+    final pending = e.status == EmailStatus.pending;
+    final statusColor = _statusColor(e.status);
     return InkWell(
       onTap: () => _selectEmail(e),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.fromLTRB(14, 10, 16, 10),
         decoration: BoxDecoration(
           color: sel ? const Color(0xFFEFF6FF) : null,
-          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          border: Border(
+            // 终态才给色条；待处理保持中性，不预支结论。
+            left: BorderSide(
+              color: pending ? Colors.transparent : statusColor,
+              width: 2,
+            ),
+            bottom: BorderSide(color: Colors.grey.shade200),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  e.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                Icon(
-                  _detectIcon(e.detected),
-                  size: 18,
-                  color: Colors.grey.shade400,
-                ),
-              ],
+            Text(
+              e.name,
+              style: TextStyle(
+                fontWeight: pending ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 14,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               e.subject,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                _tag(_detectLabel(e.detected), _detectBg(e.detected), dc),
-                ...e.tags.map(
-                  (t) =>
-                      _tag(t, const Color(0xFFE0E7FF), const Color(0xFF1E40AF)),
-                ),
-                Text(
-                  _statusLabel(e.status),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                ),
-              ],
+            const SizedBox(height: 4),
+            Text(
+              _tileStatusLine(e),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: statusColor),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// 列表行的状态文案：状态领读，阶段与初筛判定降为附注，
+  /// 不再各自占一枚彩色标签。
+  String _tileStatusLine(Email e) {
+    final parts = <String>[_statusLabel(e.status)];
+    final stage = _stageLabel(e.stage);
+    if (stage.isNotEmpty) {
+      parts.add(stage);
+    }
+    parts.add(_detectLabel(e.detected));
+    return parts.join(' · ');
+  }
+
+  String _stageLabel(String stage) {
+    switch (stage) {
+      case 'survey_sent':
+        return '问卷已发';
+      case 'invite_sent':
+        return '实训邀约已发';
+      case 'exam_sent':
+        return '笔试已发';
+      case 'interview_draft':
+        return '面试通知草稿';
+      case 'new':
+      case '':
+        return '';
+      default:
+        return stage;
+    }
   }
 
   Widget _tag(String text, Color bg, Color color) {
@@ -1014,47 +1038,36 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
       );
     }
 
-    final dc = _detectColor(e.detected);
-    final dbg = _detectBg(e.detected);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _tag(_detectLabel(e.detected), dbg, dc),
-              const SizedBox(width: 8),
-              _tag(
-                'provider API',
-                const Color(0xFFF1F5F9),
-                const Color(0xFF334155),
-              ),
-              const Spacer(),
-              Text(
-                e.status == EmailStatus.passed
-                    ? '已通过'
-                    : e.status == EmailStatus.rejected
-                    ? '已拒绝'
-                    : '',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: e.status == EmailStatus.passed
-                      ? const Color(0xFF166534)
-                      : const Color(0xFF991B1B),
+              Expanded(
+                child: Text(
+                  e.name,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
+              if (_reviewDone(e)) ...[
+                const SizedBox(width: 12),
+                _tag(
+                  _statusLabel(e.status),
+                  _statusBg(e.status),
+                  _statusColor(e.status),
+                ),
+              ],
             ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            e.name,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           Text(
-            '<${e.from}>',
+            e.position.isEmpty ? '<${e.from}>' : '<${e.from}> · ${e.position}',
             style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 2),
@@ -1062,14 +1075,10 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
             e.subject,
             style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
           ),
-          if (e.position.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              '岗位：${e.position}',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-          ],
           const SizedBox(height: 16),
+          // 决定与动作紧贴标题：不再被正文和附件压在下面。
+          _buildActionArea(e),
+          const SizedBox(height: 20),
           _bodyCard(e),
           const SizedBox(height: 12),
           _attachmentsCard(e),
@@ -1077,12 +1086,6 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
             const SizedBox(height: 12),
             _resumePreviewCard(_resumePreview!),
           ],
-          const SizedBox(height: 16),
-          _screeningCard(e, dc, dbg),
-          const SizedBox(height: 16),
-          _buildManualButtons(e),
-          const SizedBox(height: 20),
-          _buildActionPanel(e),
           if (_reportMarkdown != null) ...[
             const SizedBox(height: 20),
             _buildReportPreview(),
@@ -1404,45 +1407,95 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     );
   }
 
-  Widget _screeningCard(Email e, Color dc, Color dbg) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: dbg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: dc.withValues(alpha: 0.3)),
-      ),
-      child: Column(
+  /// 动作区：同一个位置上的三种形态。
+  /// 待处理只做决定，已通过只走流程，已拒绝只留依据。
+  Widget _buildActionArea(Email e) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _actionAreaBg(e),
+            border: Border.all(color: _actionAreaBorder(e)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '当前可做',
+                style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
+              ),
+              const SizedBox(height: 10),
+              _actionAreaBody(e),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _dryRunBanner(),
+      ],
+    );
+  }
+
+  Color _actionAreaBg(Email e) => e.status == EmailStatus.rejected
+      ? const Color(0xFFFCEBEB)
+      : const Color(0xFFF1EFE8);
+
+  Color _actionAreaBorder(Email e) => e.status == EmailStatus.rejected
+      ? const Color(0xFFF09595)
+      : const Color(0xFFD3D1C7);
+
+  Color _statusBg(EmailStatus s) => s == EmailStatus.passed
+      ? const Color(0xFFDCFCE7)
+      : s == EmailStatus.rejected
+      ? const Color(0xFFFEE2E2)
+      : const Color(0xFFF1EFE8);
+
+  Widget _actionAreaBody(Email e) {
+    if (e.status == EmailStatus.rejected) {
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            e.detected == DetectResult.only ? '自动拒绝' : '自动通过',
-            style: TextStyle(fontWeight: FontWeight.w700, color: dc),
+            '终态邮件不再提供外发动作。',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
-            e.detected == DetectResult.only
-                ? '仅含简历附件，无正文/自荐内容。不符合筛选条件。'
-                : '邮件包含正文或自荐信，进入人工流程。',
-            style: TextStyle(fontSize: 13, color: dc),
+            '依据：${_screeningReason(e)}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
         ],
-      ),
-    );
+      );
+    }
+    if (e.status == EmailStatus.pending) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildManualButtons(e),
+          const SizedBox(height: 8),
+          Text(
+            '做出结论后，才出现对应的流程动作。',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
+      );
+    }
+    return _buildFlowActions(e);
   }
+
+  String _screeningReason(Email e) => e.detected == DetectResult.only
+      ? '仅含简历附件，无正文或自荐内容'
+      : '邮件包含正文或自荐信，进入人工流程';
 
   Widget _buildManualButtons(Email e) {
     final marking = _markingEmailId == e.id;
     return Row(
       children: [
         FilledButton.icon(
-          onPressed:
-              marking ||
-                  e.status == EmailStatus.passed ||
-                  e.status == EmailStatus.rejected
-              ? null
-              : () => _mark(e, EmailStatus.passed),
+          onPressed: marking ? null : () => _mark(e, EmailStatus.passed),
           icon: marking
               ? const SizedBox(
                   width: 16,
@@ -1457,12 +1510,7 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
         ),
         const SizedBox(width: 8),
         OutlinedButton.icon(
-          onPressed:
-              marking ||
-                  e.status == EmailStatus.rejected ||
-                  e.status == EmailStatus.passed
-              ? null
-              : () => _mark(e, EmailStatus.rejected),
+          onPressed: marking ? null : () => _mark(e, EmailStatus.rejected),
           icon: const Icon(Icons.close, size: 18),
           label: const Text('拒绝'),
           style: OutlinedButton.styleFrom(
@@ -1473,91 +1521,111 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     );
   }
 
-  Widget _buildActionPanel(Email e) {
+  /// 已通过候选人的流程动作。动作清单取自 _allowedFlowActions，
+  /// 界面不再自己比对状态决定能不能发。
+  Widget _buildFlowActions(Email e) {
+    final actions = _allowedFlowActions(e);
+    if (actions.isEmpty) {
+      return Text(
+        '当前状态没有可执行的流程动作。',
+        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _interviewPositionController,
+                decoration: const InputDecoration(
+                  labelText: '面试岗位',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _interviewTimeController,
+                decoration: const InputDecoration(
+                  labelText: '面试时间',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: actions
+              .map((a) => _actionButton(e, a, _actionIcon(a), _actionLabel(a)))
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  /// 演练模式就近贴在动作旁边，而不是藏在顶栏。
+  Widget _dryRunBanner() {
+    final on = _dryRun;
+    final fg = on ? const Color(0xFF854F0B) : const Color(0xFF991B1B);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
+        color: on ? const Color(0xFFFAEEDA) : const Color(0xFFFEE2E2),
+        border: Border.all(
+          color: on ? const Color(0xFFEF9F27) : const Color(0xFFF09595),
+        ),
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Text(
-            'qtrecurit access 动作',
-            style: TextStyle(fontWeight: FontWeight.w700),
+          Icon(
+            on ? Icons.visibility_outlined : Icons.warning_amber_outlined,
+            size: 16,
+            color: fg,
           ),
-          const SizedBox(height: 8),
-          Text(
-            '每个按钮调用 provider Action API；dry_run 打开时只预览，不真实发送。',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              on ? '演练模式 · 不会真实发送' : '真实发送已开启',
+              style: TextStyle(fontSize: 12, color: fg),
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _interviewPositionController,
-                  decoration: const InputDecoration(
-                    labelText: '面试岗位',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _interviewTimeController,
-                  decoration: const InputDecoration(
-                    labelText: '面试时间',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
+          TextButton(
+            key: const ValueKey('dry-run-toggle'),
+            onPressed: () => setState(() => _dryRun = !on),
+            style: TextButton.styleFrom(
+              foregroundColor: fg,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(on ? '关闭演练' : '开启演练'),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _actionButton(
-                e,
-                RecruitmentAction.sendSurvey,
-                Icons.assignment_outlined,
-                '发送问卷',
-              ),
-              _actionButton(
-                e,
-                RecruitmentAction.sendTrainingInvite,
-                Icons.group_add_outlined,
-                '发送实训邀约',
-              ),
-              _actionButton(
-                e,
-                RecruitmentAction.sendExam,
-                Icons.quiz_outlined,
-                '发送笔试',
-              ),
-              _actionButton(
-                e,
-                RecruitmentAction.createInterviewNotice,
-                Icons.event_available_outlined,
-                '生成面试通知',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _actionMapping('发送问卷', 'send_survey'),
-          _actionMapping('发送实训邀约', 'send_training_invite'),
-          _actionMapping('发送笔试', 'send_exam'),
-          _actionMapping('生成面试通知', 'create_interview_notice'),
         ],
       ),
     );
+  }
+
+  IconData _actionIcon(RecruitmentAction action) {
+    switch (action) {
+      case RecruitmentAction.sendSurvey:
+        return Icons.assignment_outlined;
+      case RecruitmentAction.sendTrainingInvite:
+        return Icons.group_add_outlined;
+      case RecruitmentAction.sendExam:
+        return Icons.quiz_outlined;
+      case RecruitmentAction.createInterviewNotice:
+        return Icons.event_available_outlined;
+    }
   }
 
   Widget _actionButton(
@@ -1579,16 +1647,6 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
             )
           : Icon(icon, size: 18),
       label: Text(running ? '执行中' : label),
-    );
-  }
-
-  Widget _actionMapping(String label, String action) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Text(
-        '后端动作：$action（$label）',
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-      ),
     );
   }
 

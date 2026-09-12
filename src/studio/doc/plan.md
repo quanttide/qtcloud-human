@@ -66,13 +66,19 @@
 1. 浏览器直接执行本地 CLI。
 2. 页面直接连接 `lark-cli` 或飞书凭证。
 3. 完整候选人 ATS 系统。
-4. `pass` / `reject` 状态流转。
+4. ~~`pass` / `reject` 状态流转。~~（**已变更**，见下方「后续变更」）
 5. 自动排期、日历邀约和会议室预定。
 6. 简历附件解析、OCR、LLM 深度评分。
 7. 多租户权限模型。
 8. 替换 `qtrecurit` CLI 现有命令结构。
 
-`pass` / `reject` 后续应作为候选人状态动作单独设计，不混入 `access` 命令。
+`pass` / `reject` 已按“候选人状态动作”单独设计，未混入 `access` 命令。
+
+### 后续变更（超出本计划范围，已实施）
+
+- **候选人状态流转**：新增 `PATCH /api/v1/recruitment/candidates/{candidate_id}`，接受 `passed` 与 `rejected`；页面右栏提供“通过 / 拒绝”。写入的结论会在后续收件箱同步中保留。
+- **动作准入闸门**：只有 `passed` 的候选人可以执行流程动作，规则定义在 provider 领域层 `domain.AllowedRecruitmentActions`，被拦下时返回 `409 Conflict`。本计划的“动作白名单校验”原本只覆盖参数形状，不覆盖状态。
+- **终态锁动作**：招聘页面按同一套规则渲染动作区，已拒绝的候选人不再显示发送按钮。
 
 ## 边界
 
@@ -301,7 +307,7 @@ POST /api/v1/recruitment/inbox/sync
 
 1. API 文档包含报告接口和动作接口。
 2. 页面按钮与 qtrecurit 命令存在一一映射。
-3. `pass` / `reject` 明确暂缓。
+3. ~~`pass` / `reject` 明确暂缓。~~（**已变更**：该功能后续已实施，验收条件改为「候选人状态流转与动作准入闸门均已实现」，见「后续变更」）
 
 ### 第 1 步：provider 增加招聘动作骨架
 

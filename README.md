@@ -13,11 +13,12 @@ QtCloud HR —— 人力资源领域产品，覆盖招聘、薪资核算等业�
 
 ```
 docs/
-├── index.md      # 产品简介（场景-困境-救援）
-├── myst.yml      # MyST 站点配置
-├── brd/          # 业务需求文档
-├── prd/          # 产品需求文档
-└── add/          # 架构设计文档
+├── project-overview-email.md # 项目说明邮件
+└── user-guide.md             # 项目级使用、开发和部署说明
 ```
 
 文档站点：`https://quanttide.github.io/qtcloud-human/`
+
+项目说明邮件：[`docs/project-overview-email.md`](docs/project-overview-email.md)
+
+项目使用文档：[`docs/user-guide.md`](docs/user-guide.md)

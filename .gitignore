@@ -2,3 +2,7 @@
 .lark-cli/
 lark-cli-config*.json
 lark-cli-credentials*/
+
+# 本地临时目录与工作台记忆，不属于仓库交付物
+.tmp/
+.workbuddy-ai/

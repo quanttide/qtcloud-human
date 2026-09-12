@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.1.18] - 2026-09-12
+
+### Fixed
+
+- 增加候选人状态闸门：只有人工审核结论为 `passed` 的候选人可以执行发送问卷、发送实训邀约、发送笔试和生成面试通知，被拦下时返回 `409 Conflict`；此前已拒绝的候选人仍可被真实发送邮件。
+- 动作准入规则收敛到领域层 `domain.AllowedRecruitmentActions`，`RunCandidateAction` 统一校验，界面不再各自判断状态。
+
 ## [0.1.17] - 2026-09-08
 
 ### Fixed

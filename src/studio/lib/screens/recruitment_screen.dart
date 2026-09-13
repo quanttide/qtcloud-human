@@ -12,6 +12,8 @@ const _operator = String.fromEnvironment(
   'QTCLOUD_HUMAN_OPERATOR',
   defaultValue: 'studio-user',
 );
+const _compactWorkspaceBreakpoint = 900.0;
+const _compactInboxHeight = 280.0;
 
 /// 招聘筛选模块：投递邮件初筛，通过 provider API 调用 qtrecurit 能力。
 enum DetectResult { only, has_ }
@@ -147,6 +149,7 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
   _ResumePreview? _resumePreview;
   RecruitmentProviderStatus? _providerStatus;
   RecruitmentAction? _runningAction;
+  bool _actionConfirmationOpen = false;
 
   @override
   void initState() {
@@ -319,21 +322,20 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     });
   }
 
+  void _reconsider(Email email) {
+    setState(() {
+      email.status = EmailStatus.pending;
+      _resumePreview = null;
+      _lastActionError = null;
+      _lastActionMessage = '已重新进入人工审核，请选择通过或拒绝。';
+      _syncInterviewInputs(email);
+    });
+  }
+
   void _syncInterviewInputs(Email? email) {
     _interviewPositionController.text = email?.position ?? '';
     if (_interviewTimeController.text.trim().isEmpty) {
       _interviewTimeController.text = _defaultInterviewTime();
-    }
-  }
-
-  void _handleOpsMenu(String value) {
-    switch (value) {
-      case 'detect':
-        _checkProviderStatus();
-      case 'sync':
-        _syncInbox();
-      case 'report':
-        _createReport();
     }
   }
 
@@ -439,6 +441,7 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
   Future<void> _runCandidateAction(
     Email email,
     RecruitmentAction action,
+    Map<String, Object?> params,
   ) async {
     if (_apiClient == null) {
       setState(() {
@@ -452,7 +455,6 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
       _lastActionMessage = null;
     });
     try {
-      final params = _paramsForAction(email, action);
       final result = await _apiClient.runAction(
         candidateId: email.candidateId,
         action: action,
@@ -469,6 +471,68 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
         setState(() => _runningAction = null);
       }
     }
+  }
+
+  Future<void> _confirmAndRunCandidateAction(
+    Email email,
+    RecruitmentAction action,
+  ) async {
+    if (_runningAction != null || _actionConfirmationOpen) {
+      return;
+    }
+    final params = _paramsForAction(email, action);
+    setState(() => _actionConfirmationOpen = true);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text(_dryRun ? '确认${_actionLabel(action)}' : '确认真实发送'),
+          content: _actionConfirmationContent(email, action),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(_dryRun ? '确认预览' : '确认发送'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) {
+        await _runCandidateAction(email, action, params);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _actionConfirmationOpen = false);
+      }
+    }
+  }
+
+  Widget _actionConfirmationContent(Email email, RecruitmentAction action) {
+    final details = <String>[
+      '候选人：${email.name}',
+      '收件人：${email.from}',
+      if (email.position.trim().isNotEmpty) '岗位：${email.position.trim()}',
+      if (action == RecruitmentAction.createInterviewNotice)
+        '面试时间：${_interviewTimeController.text.trim()}',
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(_dryRun ? '当前为演练模式，不会真实发送邮件。' : '当前将执行真实招聘动作，请确认以下信息。'),
+        const SizedBox(height: 12),
+        ...details.map(
+          (detail) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(detail),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _previewResumeAttachment(
@@ -652,40 +716,7 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
       appBar: AppBar(
         title: const Text('招聘筛选网关'),
         centerTitle: false,
-        actions: [
-          PopupMenuButton<String>(
-            key: const ValueKey('ops-menu'),
-            tooltip: '运维',
-            onSelected: _handleOpsMenu,
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                value: 'detect',
-                enabled: !_providerStatusLoading,
-                child: Text(_providerStatusLoading ? '检测中…' : '检测环境'),
-              ),
-              PopupMenuItem<String>(
-                value: 'sync',
-                enabled: !_inboxSyncLoading,
-                child: Text(_inboxSyncLoading ? '拉取中…' : '拉取新邮件'),
-              ),
-              PopupMenuItem<String>(
-                value: 'report',
-                enabled: !_reportLoading && !_inboxSyncLoading,
-                child: Text(_reportLoading ? '生成中…' : '生成报告'),
-              ),
-            ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
-                children: [
-                  Text('运维', style: TextStyle(fontSize: 14)),
-                  SizedBox(width: 4),
-                  Icon(Icons.more_horiz, size: 18),
-                ],
-              ),
-            ),
-          ),
-        ],
+        actions: [_buildOpsActions()],
       ),
       body: FutureBuilder<List<Email>>(
         future: _future,
@@ -706,18 +737,103 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
               if (_providerStatus != null)
                 _buildProviderStatusBar(_providerStatus!),
               _buildFeedbackBar(),
-              Expanded(
-                child: Row(
-                  children: [
-                    SizedBox(width: 360, child: _buildEmailList()),
-                    const VerticalDivider(width: 1),
-                    Expanded(child: _buildDetail()),
-                  ],
-                ),
-              ),
+              Expanded(child: _buildEmailWorkspace()),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildEmailWorkspace() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < _compactWorkspaceBreakpoint) {
+          return Column(
+            key: const ValueKey('compact-email-workspace'),
+            children: [
+              SizedBox(height: _compactInboxHeight, child: _buildEmailList()),
+              const Divider(height: 1),
+              Expanded(child: _buildDetail()),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            SizedBox(width: 360, child: _buildEmailList()),
+            const VerticalDivider(width: 1),
+            Expanded(child: _buildDetail()),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildOpsActions() {
+    final compact = MediaQuery.sizeOf(context).width < 700;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Row(
+        key: const ValueKey('ops-actions'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!compact) ...[
+            const Text('运维', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 4),
+          ],
+          _opsActionButton(
+            key: const ValueKey('ops-detect-action'),
+            icon: Icons.health_and_safety_outlined,
+            label: _providerStatusLoading
+                ? (compact ? '检测中' : '检测中…')
+                : (compact ? '检测' : '检测环境'),
+            tooltip: '检测环境',
+            onPressed: _providerStatusLoading ? null : _checkProviderStatus,
+          ),
+          _opsActionButton(
+            key: const ValueKey('ops-sync-action'),
+            icon: Icons.sync_outlined,
+            label: _inboxSyncLoading
+                ? (compact ? '拉取中' : '拉取中…')
+                : (compact ? '拉取' : '拉取新邮件'),
+            tooltip: '拉取新邮件',
+            onPressed: _inboxSyncLoading ? null : _syncInbox,
+          ),
+          _opsActionButton(
+            key: const ValueKey('ops-report-action'),
+            icon: Icons.description_outlined,
+            label: _reportLoading
+                ? (compact ? '生成中' : '生成中…')
+                : (compact ? '报告' : '生成报告'),
+            tooltip: '生成报告',
+            onPressed: _reportLoading || _inboxSyncLoading
+                ? null
+                : _createReport,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _opsActionButton({
+    required Key key,
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        key: key,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(0, 44),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }
@@ -820,12 +936,12 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
             filter: InboxFilter.unprocessed,
           ),
           _statItem('全部', _total.toString(), filter: InboxFilter.all),
+          _statItem('有正文', '$_hasCount/$_total', filter: InboxFilter.hasBody),
           _statItem(
-            '有正文',
-            '$_hasCount/$_total',
-            filter: InboxFilter.hasBody,
+            '已处理',
+            '$_processed/$_total',
+            filter: InboxFilter.processed,
           ),
-          _statItem('已处理', '$_processed/$_total', filter: InboxFilter.processed),
         ],
       ),
     );
@@ -1238,9 +1354,7 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
                               : Icons.visibility_outlined,
                           size: 16,
                         ),
-                  label: Text(
-                    opening ? '处理中' : (previewReady ? '重新预览' : '预览'),
-                  ),
+                  label: Text(opening ? '处理中' : (previewReady ? '重新预览' : '预览')),
                 ),
               OutlinedButton.icon(
                 onPressed: opening
@@ -1467,6 +1581,15 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
             '依据：${_screeningReason(e)}',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => _reconsider(e),
+            icon: const Icon(Icons.rate_review_outlined, size: 18),
+            label: const Text('重新审核'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF5F5E5A),
+            ),
+          ),
         ],
       );
     }
@@ -1486,9 +1609,8 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
     return _buildFlowActions(e);
   }
 
-  String _screeningReason(Email e) => e.detected == DetectResult.only
-      ? '仅含简历附件，无正文或自荐内容'
-      : '邮件包含正文或自荐信，进入人工流程';
+  String _screeningReason(Email e) =>
+      e.detected == DetectResult.only ? '仅含简历附件，无正文或自荐内容' : '邮件包含正文或自荐信，进入人工流程';
 
   Widget _buildManualButtons(Email e) {
     final marking = _markingEmailId == e.id;
@@ -1636,9 +1758,9 @@ class _RecruitmentPageState extends State<RecruitmentPage> {
   ) {
     final running = _runningAction == action;
     return FilledButton.icon(
-      onPressed: _runningAction != null
+      onPressed: _runningAction != null || _actionConfirmationOpen
           ? null
-          : () => _runCandidateAction(e, action),
+          : () => _confirmAndRunCandidateAction(e, action),
       icon: running
           ? const SizedBox(
               width: 16,

@@ -733,9 +733,12 @@ void main() {
 
     expect(find.textContaining('未配置 provider API'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('ops-menu')));
-    await tester.pumpAndSettle();
-
+    expect(find.byKey(const ValueKey('ops-menu')), findsNothing);
+    expect(find.byKey(const ValueKey('ops-actions')), findsOneWidget);
+    final opsActions = tester.widget<Row>(
+      find.byKey(const ValueKey('ops-actions')),
+    );
+    expect(opsActions.mainAxisSize, MainAxisSize.min);
     expect(find.text('检测环境'), findsOneWidget);
     expect(find.text('拉取新邮件'), findsOneWidget);
     expect(find.text('生成报告'), findsOneWidget);
@@ -795,9 +798,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('ops-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('检测环境'));
+    await tester.tap(find.byKey(const ValueKey('ops-detect-action')));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('provider 环境未就绪'), findsWidgets);
@@ -868,6 +869,68 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '拒绝'), findsNothing);
   });
 
+  testWidgets(
+    'Recruitment page confirms a flow action before sending or previewing',
+    (tester) async {
+      var actionRequests = 0;
+      final client = RecruitmentApiClient(
+        baseUrl: 'https://api.example.test',
+        operator: 'tester',
+        httpClient: MockClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/recruitment/candidates') {
+            return jsonResponse(candidatesJson().sublist(2), 200);
+          }
+          if (request.method == 'POST' &&
+              request.url.path ==
+                  '/api/v1/recruitment/candidates/cand_processed/actions') {
+            actionRequests++;
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            expect(body['action'], 'send_survey');
+            return jsonResponse({
+              'action_id': 'act_001',
+              'candidate_id': 'cand_processed',
+              'action': 'send_survey',
+              'status': 'dry_run',
+              'message': '已完成 dry_run 预览，未发送邮件',
+              'created_at': '2026-09-05T06:00:00Z',
+            }, 201);
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: RecruitmentPage(apiClient: client)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.widgetWithText(FilledButton, '发送问卷'));
+      await tester.tap(find.widgetWithText(FilledButton, '发送问卷'));
+      await tester.pumpAndSettle();
+
+      expect(actionRequests, 0);
+      expect(find.text('确认发送问卷'), findsOneWidget);
+      expect(find.text('收件人：processed@example.com'), findsOneWidget);
+      expect(find.text('岗位：运营'), findsOneWidget);
+      expect(find.text('演练模式 · 不会真实发送'), findsOneWidget);
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(actionRequests, 0);
+      expect(find.text('确认发送问卷'), findsNothing);
+
+      await tester.ensureVisible(find.widgetWithText(FilledButton, '发送问卷'));
+      await tester.tap(find.widgetWithText(FilledButton, '发送问卷'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确认预览'));
+      await tester.pumpAndSettle();
+
+      expect(actionRequests, 1);
+      expect(find.textContaining('发送问卷：'), findsOneWidget);
+    },
+  );
+
   testWidgets('Recruitment page highlights the selected inbox tile', (
     tester,
   ) async {
@@ -913,9 +976,65 @@ void main() {
 
     expect(find.text('演练模式 · 不会真实发送'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('dry-run-toggle')));
     await tester.tap(find.byKey(const ValueKey('dry-run-toggle')));
     await tester.pumpAndSettle();
 
     expect(find.text('真实发送已开启'), findsOneWidget);
   });
+
+  testWidgets('Recruitment page supports reconsidering a rejected candidate', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecruitmentPage(apiClient: clientForCandidates(candidatesJson())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(InkWell, '旧候选人'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(OutlinedButton, '重新审核'), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(OutlinedButton, '重新审核'));
+    await tester.tap(find.widgetWithText(OutlinedButton, '重新审核'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, '通过'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '拒绝'), findsOneWidget);
+    expect(find.text('终态邮件不再提供外发动作。'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '发送问卷'), findsNothing);
+  });
+
+  testWidgets('Recruitment page uses a vertical workspace on narrow windows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 390,
+          height: 844,
+          child: RecruitmentPage(
+            apiClient: clientForCandidates(candidatesJson()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('compact-email-workspace')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+}
+
+http.Response jsonResponse(Object body, int statusCode) {
+  return http.Response.bytes(
+    utf8.encode(jsonEncode(body)),
+    statusCode,
+    headers: {'content-type': 'application/json; charset=utf-8'},
+  );
 }

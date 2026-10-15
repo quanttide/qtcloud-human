@@ -41,6 +41,6 @@ myst start           # 启动本地预览服务器（默认 http://localhost:300
 
 ### 注意事项
 
-- 编写 PRD 前，先加载 `product-prd` SKILL（`/home/iguo/repos/quanttide/assets/quanttide-platform/.agents/skills/product-prd/SKILL.md`）确保格式规范
+- 编写 PRD 前，先加载 `product-prd` SKILL（`/home/iguo/repos/quanttide/categories/quanttide-platform/.agents/skills/product-prd/SKILL.md`）确保格式规范
 - BRD 使用 `product-brd` SKILL 标准格式（场景-工作角色-问题四要素-假设句式）
 - 提交前确认子仓库和主仓库两段式提交均已推送
